@@ -1,22 +1,22 @@
 """Trousseau du code de la consigne signée : clés PUBLIQUES et numéro de génération (spec consigne, § 3.3).
 
-!!! CLES DE TEST !!!  `CLES_DE_TEST = True` : ces trois clés publiques sont celles d'un trousseau d'essai. Leurs clés privées
-ne vivent que dans `tests/consigne_outils.py`. Les vraies clés viendront de la cérémonie des clés (spec § 10.3) ; elles
-remplaceront ces valeurs, avec `GENERATION = 0` et `CLES_DE_TEST = False`. `tools/consigne.py signer` refusera un
-trousseau marqué de test (lot D) ; l'app ne le refuse pas, car elle ne signe rien.
+Trousseau réel de la consigne signée, génération 0 : clés de la cérémonie des clés du 2026-11-15 (PC Gamer, 20:58).
+`CLES_DE_TEST = False` ; `tools/consigne.py signer` accepte ce trousseau. Les clés d'essai (graines dans `tests/consigne_outils.py`)
+ne servent qu'aux tests.
 
 Rien de secret ici. Une clé publique = ses 32 octets bruts Ed25519 en base64url sans remplissage (43 caractères).
 """
 
-CLES_DE_TEST = True
+CLES_DE_TEST = False
 
 # Génération du trousseau : 0 pour le premier exe public ; une relève de génération r installe r (spec § 3.3).
 GENERATION = 0
 
+# Clés de la cérémonie des clés du 2026-11-15 (PC Gamer, 20:58 ; les clés du message de 20:41 sont annulées).
 CLES = {
-    "consigne": {"C1": "ZIE6nagg8ACATY5VtK8RaWYXJeXp7Ykdhq83lRUH2oI"},
-    "fraicheur": {"F1": "36RNejo0RbxSosUi-w2RhaLgtef5ol7sb7P3wAJjYy8"},
-    "secours": {"S1": "c10D82A7FG-DeoDU0K-69UgaZ4GOunRv5zV8vrqas4M"},
+    "consigne": {"C1": "581hsu1PQhkaLdMkbi47YGGHPnkZGpOSpiOo0wCuvs8"},
+    "fraicheur": {"F1": "aphT1YAKK0FoIjrVH30K-MJ1oTH9_MMn8jjLu5HfT-c"},
+    "secours": {"S1": "HvRlTxD1u6UmvEkQaTsGvsJ086Ij0vuYS6rUhr16RmQ"},
 }
 
 # Toutes les révocations connues à la fabrication de cet exe (une clé révoquée n'est plus acceptée, nulle part).
