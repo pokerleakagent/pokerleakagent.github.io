@@ -2,7 +2,8 @@
 
 Lancé par `bulletin.yml` après la fabrication, à chaque passage (même si rien n'a été publié). Dossier de travail `outils/`.
 Lit le miroir et le site comme l'app (User-Agent fixe, sans cookie). Alerte = un ticket « ALERTE consigne » du dépôt
-(ouvert ou complété) et code de sortie 1 (courriel d'échec en plus). Le passage précédent est gardé dans `etat/surveillance.json`
+(ouvert ou complété) et code de sortie 1 (courriel d'échec en plus). Un passage sain ferme le ticket ouvert (spec § 10.7.4).
+Le passage précédent est gardé dans `etat/surveillance.json`
 (commité par la tâche) pour le critère « site muet à deux passages de suite ».
 
 Codes : 0 = rien à signaler ; 1 = alerte (ticket ouvert ou complété) ; 2 = configuration.
@@ -12,6 +13,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 import time
 import urllib.error
 import urllib.request
@@ -104,9 +106,11 @@ def analyser(aujourd_hui: date, maintenant: datetime, miroir, site, commit_consi
     return raisons, nouvel_etat
 
 
-def passer(*, modele, fetch, alerte, attendre, maintenant: datetime, commit_consigne, etat_fichier: Path) -> int:
+def passer(*, modele, fetch, alerte, fin_d_alerte, attendre, maintenant: datetime, commit_consigne,
+           etat_fichier: Path) -> int:
     """Un passage complet. `fetch(url)` renvoie (octets, date du site) ou lève Injoignable / Absent ; `alerte(texte)`
-    ouvre ou complète le ticket. Tout ce qui sort du poste est injecté (les tests le remplacent)."""
+    ouvre ou complète le ticket ; `fin_d_alerte(texte)` est appelé à chaque passage SAIN (il ferme le ticket ouvert,
+    s'il y en a un, spec § 10.7.4). Tout ce qui sort du poste est injecté (les tests le remplacent)."""
     jour = maintenant.astimezone(timezone.utc).date()
     precedent = json.loads(etat_fichier.read_text(encoding="utf-8")) if etat_fichier.exists() else {}
     miroir = _miroir(fetch, modele, maintenant, jour)
@@ -119,6 +123,7 @@ def passer(*, modele, fetch, alerte, attendre, maintenant: datetime, commit_cons
     if raisons:
         alerte(f"{TITRE} : " + " ; ".join(raisons) + f" (passage du {maintenant:%Y-%m-%d %H:%M} UTC)")
         return 1
+    fin_d_alerte(f"tout est revenu normal, passage du {maintenant:%Y-%m-%d %H:%M} UTC")
     return 0
 
 
@@ -194,11 +199,35 @@ def alerte_github(texte: str) -> None:
         subprocess.run(["gh", "issue", "create", "--repo", REPO, "--title", TITRE, "--body", texte], check=True)
 
 
+def _gh(args: list[str]) -> str:
+    """Lance `gh` et rend sa sortie ; une erreur lève CalledProcessError (ou OSError si `gh` manque)."""
+    return subprocess.run(["gh", *args], capture_output=True, text=True, check=True).stdout
+
+
+def fin_d_alerte_github(texte: str, gh=_gh) -> None:
+    """Un passage sain ferme le ticket « ALERTE consigne » ouvert : un commentaire (`texte`), puis la fermeture.
+    Aucun ticket ouvert = rien. Une erreur de `gh` ne fait pas échouer le passage : elle est écrite dans le journal."""
+    try:
+        liste = gh(["issue", "list", "--repo", REPO, "--state", "open", "--search", f"{TITRE} in:title",
+                    "--json", "number,title"])
+        for ticket in json.loads(liste or "[]"):
+            if ticket.get("title") != TITRE:
+                continue
+            numero = str(ticket["number"])
+            gh(["issue", "comment", numero, "--repo", REPO, "--body", texte])
+            gh(["issue", "close", numero, "--repo", REPO])
+            print(f"surveillance : ticket « {TITRE} » n° {numero} fermé (tout est revenu normal)")
+    except (subprocess.CalledProcessError, OSError, ValueError, KeyError) as erreur:
+        print(f"surveillance : fermeture du ticket « {TITRE} » impossible ({erreur}) ; le passage reste sain",
+              file=sys.stderr)
+
+
 def main() -> int:
     from pla_commun import consigne_cles
     maintenant = datetime.now(timezone.utc)
-    return passer(modele=consigne_cles, fetch=lire_adresse, alerte=alerte_github, attendre=time.sleep,
-                  maintenant=maintenant, commit_consigne=date_du_dernier_commit(RACINE_DEPOT), etat_fichier=ETAT)
+    return passer(modele=consigne_cles, fetch=lire_adresse, alerte=alerte_github, fin_d_alerte=fin_d_alerte_github,
+                  attendre=time.sleep, maintenant=maintenant, commit_consigne=date_du_dernier_commit(RACINE_DEPOT),
+                  etat_fichier=ETAT)
 
 
 if __name__ == "__main__":
